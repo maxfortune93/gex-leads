@@ -1,0 +1,10 @@
+{
+  "requests": 36,
+  "raw_payloads": 36,
+  "accepted_unique": 26,
+  "duplicates": 2,
+  "decrypt_failed": 2,
+  "schema_failed": 3,
+  "ignored": 3,
+  "lead_received_published": 26
+}

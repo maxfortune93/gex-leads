@@ -1,0 +1,74 @@
+x-app-env: &app-env
+  MYSQL_HOST: mysql
+  MYSQL_PORT: 3306
+  MYSQL_DATABASE: ${MYSQL_DATABASE:-gex_backend_test}
+  MYSQL_USER: ${MYSQL_USER:-gex}
+  MYSQL_PASSWORD: ${MYSQL_PASSWORD:-gex_local_password}
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_AMQP_PORT: 5672
+  RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-gex}
+  RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-gex_local_password}
+  AES_KEY_FILE: /srv/data/grummer_secret.txt
+
+services:
+  mysql:
+    image: mysql:8.0.40
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-gex_backend_test}
+      MYSQL_USER: ${MYSQL_USER:-gex}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-gex_local_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-gex_root_local_password}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-gex_root_local_password}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-gex}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-gex_local_password}
+    ports:
+      - "${RABBITMQ_AMQP_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  api:
+    build: .
+    environment: *app-env
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./data/grummer_secret.txt:/srv/data/grummer_secret.txt:ro
+    depends_on:
+      mysql: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+
+  worker:
+    build: .
+    command: ["python", "-m", "app.worker"]
+    environment: *app-env
+    volumes:
+      - ./data/grummer_secret.txt:/srv/data/grummer_secret.txt:ro
+    depends_on:
+      mysql: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  rabbitmq_data:
